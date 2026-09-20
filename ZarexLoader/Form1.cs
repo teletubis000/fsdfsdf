@@ -272,7 +272,7 @@ public partial class Form1 : Form
         {
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Minecraft Launcher", "MinecraftLauncher.exe"),
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Minecraft Launcher", "MinecraftLauncher.exe"),
-            @"C:XboxGamesMinecraft LauncherContentMinecraft.exe"
+            @"C:\XboxGames\Minecraft Launcher\Content\Minecraft.exe"
         };
 
         var launcher = candidates.FirstOrDefault(File.Exists);
@@ -327,7 +327,7 @@ public partial class Form1 : Form
 
     private static void CopyOptions(string gameDir)
     {
-        var publicDir = Path.Combine(Environment.GetEnvironmentVariable("PUBLIC") ?? @"C:UsersPublic", "Zarex");
+        var publicDir = Path.Combine(Environment.GetEnvironmentVariable("PUBLIC") ?? @"C:\Users\Public", "Zarex");
         var source = Path.Combine(publicDir, "options.txt");
         if (File.Exists(source)) File.Copy(source, Path.Combine(gameDir, "options.txt"), true);
     }
