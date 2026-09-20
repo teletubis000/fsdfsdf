@@ -193,7 +193,91 @@ static std::atomic<bool> g_stop{ false };
 static std::atomic<int> g_progress{ 0 };
 static std::atomic<int> g_spinner{ 0 };
 
+
 static std::thread g_worker;
+
+// ============================================================
+// MODERN UI / DOUBLE BUFFERING
+// ============================================================
+
+enum class UIHoverTarget
+{
+    None,
+    Username,
+    Password,
+    Login,
+    Save,
+    Load
+};
+
+static UIHoverTarget g_hoverTarget = UIHoverTarget::None;
+static UIHoverTarget g_pressedTarget = UIHoverTarget::None;
+static int g_mouseX = -1;
+static int g_mouseY = -1;
+
+static HDC g_backDC = nullptr;
+static HBITMAP g_backBitmap = nullptr;
+static HBITMAP g_backOldBitmap = nullptr;
+static int g_backWidth = 0;
+static int g_backHeight = 0;
+
+static void DestroyBackBuffer()
+{
+    if (g_backDC)
+    {
+        if (g_backOldBitmap)
+        {
+            SelectObject(g_backDC, g_backOldBitmap);
+            g_backOldBitmap = nullptr;
+        }
+
+        if (g_backBitmap)
+        {
+            DeleteObject(g_backBitmap);
+            g_backBitmap = nullptr;
+        }
+
+        DeleteDC(g_backDC);
+        g_backDC = nullptr;
+    }
+
+    g_backWidth = 0;
+    g_backHeight = 0;
+}
+
+static bool EnsureBackBuffer(HDC windowDC, int width, int height)
+{
+    if (width <= 0 || height <= 0)
+        return false;
+
+    if (g_backDC &&
+        g_backWidth == width &&
+        g_backHeight == height)
+    {
+        return true;
+    }
+
+    DestroyBackBuffer();
+
+    g_backDC = CreateCompatibleDC(windowDC);
+    if (!g_backDC)
+        return false;
+
+    g_backBitmap = CreateCompatibleBitmap(windowDC, width, height);
+    if (!g_backBitmap)
+    {
+        DestroyBackBuffer();
+        return false;
+    }
+
+    g_backOldBitmap =
+        static_cast<HBITMAP>(SelectObject(g_backDC, g_backBitmap));
+
+    g_backWidth = width;
+    g_backHeight = height;
+
+    return true;
+}
 
 // ============================================================
 // COLORS
@@ -2103,6 +2187,9 @@ static void Text(
     Gdiplus::FontStyle style =
     Gdiplus::FontStyleRegular)
 {
+    if (text.empty())
+        return;
+
     FontFamily fontFamily(family);
 
     Font font(
@@ -2119,6 +2206,12 @@ static void Text(
     format.SetAlignment(alignment);
     format.SetLineAlignment(
         Gdiplus::StringAlignmentCenter
+    );
+    format.SetTrimming(
+        Gdiplus::StringTrimmingEllipsisCharacter
+    );
+    format.SetFormatFlags(
+        Gdiplus::StringFormatFlagsNoWrap
     );
 
     RectF rectangle(
@@ -2349,8 +2442,16 @@ static void DrawBackground(
     int width,
     int height)
 {
-    SolidBrush background(
-        C(28, 28, 28)
+    LinearGradientBrush background(
+        RectF(
+            0.0f,
+            0.0f,
+            static_cast<Real>(width),
+            static_cast<Real>(height)
+        ),
+        C(255, 12, 12, 14),
+        C(255, 25, 25, 29),
+        Gdiplus::LinearGradientModeVertical
     );
 
     graphics.FillRectangle(
@@ -2552,6 +2653,30 @@ static void DrawLogin(
         );
     }
 
+    if (g_hoverTarget == UIHoverTarget::Username || g_userFocus)
+    {
+        BorderGlow(
+            graphics,
+            183.0f,
+            292.0f,
+            274.0f,
+            29.0f,
+            4.0f
+        );
+    }
+
+    if (g_hoverTarget == UIHoverTarget::Password || g_passFocus)
+    {
+        BorderGlow(
+            graphics,
+            183.0f,
+            362.0f,
+            274.0f,
+            29.0f,
+            4.0f
+        );
+    }
+
     LinearGradientBrush userGradient(
         RectF(
             300.0f,
@@ -2657,46 +2782,50 @@ static void DrawLogin(
         );
     }
 
+    const bool loginHovered =
+        g_hoverTarget == UIHoverTarget::Login;
+    const bool loginPressed =
+        g_pressedTarget == UIHoverTarget::Login;
+
+    const Real loginY =
+        405.0f + (loginPressed ? 1.0f : 0.0f);
+
     RoundedRect(
         graphics,
-        255.0f,
-        411.0f,
-        125.0f,
-        29.0f,
-        4.0f,
-        C(57, 56, 57)
+        245.0f,
+        loginY,
+        140.0f,
+        41.0f,
+        9.0f,
+        loginHovered
+            ? C(255, 255, 240)
+            : C(245, 225, 45)
     );
 
-    LinearGradientBrush loginGradient(
-        RectF(
-            255.0f,
-            411.0f,
-            125.0f,
-            29.0f
-        ),
-        C(75, 72, 35),
-        C(45, 44, 46),
-        Gdiplus::LinearGradientModeHorizontal
-    );
-
-    graphics.FillRectangle(
-        &loginGradient,
-        255.0f,
-        411.0f,
-        125.0f,
-        29.0f
-    );
+    if (loginHovered)
+    {
+        BorderGlow(
+            graphics,
+            245.0f,
+            loginY,
+            140.0f,
+            41.0f,
+            9.0f
+        );
+    }
 
     Text(
         graphics,
         L"Login",
-        255.0f,
-        411.0f,
-        125.0f,
-        29.0f,
-        14.0f,
-        C(225, 225, 225),
-        Gdiplus::StringAlignmentCenter
+        245.0f,
+        loginY,
+        140.0f,
+        41.0f,
+        13.0f,
+        C(20, 20, 20),
+        Gdiplus::StringAlignmentCenter,
+        L"Segoe UI",
+        Gdiplus::FontStyleBold
     );
 
     Text(
@@ -3289,54 +3418,52 @@ static void DrawScreen(
     HDC dc)
 {
     RECT client{};
+    GetClientRect(g_hwnd, &client);
 
-    GetClientRect(
-        g_hwnd,
-        &client
-    );
+    const int width = client.right - client.left;
+    const int height = client.bottom - client.top;
 
-    const int width =
-        client.right -
-        client.left;
+    if (width <= 0 || height <= 0)
+        return;
 
-    const int height =
-        client.bottom -
-        client.top;
+    if (!EnsureBackBuffer(dc, width, height))
+        return;
 
-    Graphics graphics(dc);
+    Graphics graphics(g_backDC);
 
-    graphics.SetSmoothingMode(
-        Gdiplus::SmoothingModeAntiAlias
-    );
+    graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
+    graphics.SetCompositingQuality(Gdiplus::CompositingQualityHighQuality);
+    graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+    graphics.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
 
-    graphics.SetTextRenderingHint(
-        Gdiplus::TextRenderingHintClearTypeGridFit
+    SolidBrush clearBrush(C(15, 15, 17));
+    graphics.FillRectangle(
+        &clearBrush,
+        0.0f,
+        0.0f,
+        static_cast<Real>(width),
+        static_cast<Real>(height)
     );
 
     if (g_screen == 0)
-    {
-        DrawLogin(
-            graphics,
-            width,
-            height
-        );
-    }
+        DrawLogin(graphics, width, height);
     else if (g_screen == 1)
-    {
-        DrawMenu(
-            graphics,
-            width,
-            height
-        );
-    }
+        DrawMenu(graphics, width, height);
     else
-    {
-        DrawLoading(
-            graphics,
-            width,
-            height
-        );
-    }
+        DrawLoading(graphics, width, height);
+
+    BitBlt(
+        dc,
+        0,
+        0,
+        width,
+        height,
+        g_backDC,
+        0,
+        0,
+        SRCCOPY
+    );
 }
 
 // ============================================================
@@ -3473,7 +3600,7 @@ static LRESULT CALLBACK WndProc(
         SetTimer(
             hwnd,
             10,
-            70,
+            16,
             nullptr
         );
 
@@ -3482,17 +3609,8 @@ static LRESULT CALLBACK WndProc(
 
     case WM_TIMER:
     {
-        if (g_screen == 2)
-        {
-            ++g_spinner;
-
-            InvalidateRect(
-                hwnd,
-                nullptr,
-                FALSE
-            );
-        }
-
+        ++g_spinner;
+        InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
     }
 
@@ -3685,6 +3803,52 @@ static LRESULT CALLBACK WndProc(
         return HTCLIENT;
     }
 
+    case WM_MOUSEMOVE:
+    {
+        TRACKMOUSEEVENT tme{};
+        tme.cbSize = sizeof(tme);
+        tme.dwFlags = TME_LEAVE;
+        tme.hwndTrack = hwnd;
+        TrackMouseEvent(&tme);
+
+        g_mouseX = GET_X_LPARAM(lParam);
+        g_mouseY = GET_Y_LPARAM(lParam);
+
+        UIHoverTarget target = UIHoverTarget::None;
+
+        if (g_screen == 0)
+        {
+            if (InRect(g_mouseX, g_mouseY, 180, 285, 462, 326))
+                target = UIHoverTarget::Username;
+            else if (InRect(g_mouseX, g_mouseY, 180, 355, 462, 397))
+                target = UIHoverTarget::Password;
+            else if (InRect(g_mouseX, g_mouseY, 245, 405, 385, 446))
+                target = UIHoverTarget::Login;
+            else if (InRect(g_mouseX, g_mouseY, 350, 441, 380, 470))
+                target = UIHoverTarget::Save;
+        }
+        else if (g_screen == 1)
+        {
+            if (InRect(g_mouseX, g_mouseY, 70, 420, 210, 465))
+                target = UIHoverTarget::Load;
+        }
+
+        g_hoverTarget = target;
+        return 0;
+    }
+
+    case WM_MOUSELEAVE:
+    {
+        g_hoverTarget = UIHoverTarget::None;
+        return 0;
+    }
+
+    case WM_LBUTTONUP:
+    {
+        g_pressedTarget = UIHoverTarget::None;
+        return 0;
+    }
+
     case WM_LBUTTONDOWN:
     {
         const int x =
@@ -3692,6 +3856,8 @@ static LRESULT CALLBACK WndProc(
 
         const int y =
             GET_Y_LPARAM(lParam);
+
+        g_pressedTarget = UIHoverTarget::None;
 
         if (g_screen == 0)
         {
@@ -3737,20 +3903,24 @@ static LRESULT CALLBACK WndProc(
 
             if (userArea)
             {
+                g_pressedTarget = UIHoverTarget::Username;
                 g_userFocus = true;
                 g_passFocus = false;
             }
             else if (passArea)
             {
+                g_pressedTarget = UIHoverTarget::Password;
                 g_userFocus = false;
                 g_passFocus = true;
             }
             else if (loginButton)
             {
+                g_pressedTarget = UIHoverTarget::Login;
                 StartLogin();
             }
             else if (saveButton)
             {
+                g_pressedTarget = UIHoverTarget::Save;
                 g_save = !g_save;
             }
             else
@@ -3789,6 +3959,7 @@ static LRESULT CALLBACK WndProc(
 
             if (loadButton)
             {
+                g_pressedTarget = UIHoverTarget::Load;
                 StartLoading();
             }
             else
@@ -3970,6 +4141,8 @@ static LRESULT CALLBACK WndProc(
             hwnd,
             10
         );
+
+        DestroyBackBuffer();
 
         g_stop = true;
 
@@ -4157,6 +4330,8 @@ int APIENTRY wWinMain(
         g_stop = true;
         g_worker.join();
     }
+
+    DestroyBackBuffer();
 
     Gdiplus::GdiplusShutdown(
         g_gdiplus
