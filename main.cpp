@@ -58,6 +58,7 @@ using Gdiplus::LinearGradientModeHorizontal;
 using Gdiplus::Pen;
 using Gdiplus::RectF;
 using Gdiplus::SolidBrush;
+using Gdiplus::StringFormat;
 
 using Real = Gdiplus::REAL;
 
@@ -2102,9 +2103,7 @@ static void Text(
     Gdiplus::FontStyle style =
     Gdiplus::FontStyleRegular)
 {
-    FontFamily fontFamily(
-        family
-    );
+    FontFamily fontFamily(family);
 
     Font font(
         &fontFamily,
@@ -2113,16 +2112,11 @@ static void Text(
         Gdiplus::UnitPixel
     );
 
-    SolidBrush brush(
-        color
-    );
+    SolidBrush brush(color);
 
-    StringFormat format;
+    Gdiplus::StringFormat format;
 
-    format.SetAlignment(
-        alignment
-    );
-
+    format.SetAlignment(alignment);
     format.SetLineAlignment(
         Gdiplus::StringAlignmentCenter
     );
