@@ -5,7 +5,6 @@
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>ZarexLoader</AssemblyName>
     <RootNamespace>ZarexLoader</RootNamespace>
   </PropertyGroup>
