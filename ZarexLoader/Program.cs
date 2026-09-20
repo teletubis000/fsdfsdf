@@ -1,13 +1,11 @@
-using System.Windows.Forms;
-
 namespace ZarexLoader;
 
 internal static class Program
 {
     [STAThread]
-    private static void Main()
+    static void Main()
     {
         ApplicationConfiguration.Initialize();
-        Application.Run(new LoaderForm());
+        Application.Run(new Form1());
     }
 }
